@@ -1,3 +1,11 @@
+## 0.1.1
+
+* **Full pub.dev Scoring & Static Analysis Compliance**:
+  * Migrated built-in widgets (`LocalSearchEmptyState`, `LocalSearchResultBuilder`) to `package:flutter/widgets.dart` for deprecation-free compatibility across Flutter `3.29` through `3.50+`.
+  * Added `example/lib/main.dart` with a complete runnable Product Search example (unlocking the pub.dev **Example** tab).
+  * Refined `pubspec.yaml` description length (166 chars) and fixed GitHub repository/issue tracker URLs.
+  * Upgraded `README.md` with icons, a Product quickstart guide, AI/developer FAQ, and community sharing links.
+
 ## 0.1.0
 
 * Initial production release of `flutter_local_search`.

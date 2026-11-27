@@ -1,11 +1,11 @@
 name: flutter_local_search
 description: >-
-  An embedded, offline-first full-text search engine for Flutter and Dart with
-  BM25 ranking, typo-tolerant fuzzy search, prefix autocomplete, phrase queries,
-  faceted filtering, and SQLite persistence—no backend required.
-version: 0.1.0
-repository: https://github.com/vaibhavjangir/flutter_local_search
-issue_tracker: https://github.com/vaibhavjangir/flutter_local_search/issues
+  Offline-first full-text search engine for Flutter and Dart with BM25F ranking,
+  typo-tolerant fuzzy search, prefix autocomplete, phrase queries, facets, and
+  SQLite WAL.
+version: 0.1.1
+repository: https://github.com/VaibhavJangir26/flutter_local_search
+issue_tracker: https://github.com/VaibhavJangir26/flutter_local_search/issues
 
 topics:
   - search

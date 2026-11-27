@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_local_search/flutter_local_search.dart';
 
@@ -71,49 +71,62 @@ void main() {
           .where(SearchFilter.gt('price', 900))
           .where(SearchFilter.inList('brand', ['Apple', 'Dell']));
 
-      final res = await search.searchQuery(query, facets: ['brand', 'category']);
+      final res = await search.searchQuery(
+        query,
+        facets: ['brand', 'category'],
+      );
       expect(res.totalHits, 1);
       expect(res.hits.first.id, '2');
       expect(res.facetCounts['brand']?['Apple'], 1);
       expect(res.facetCounts['category']?['laptops'], 1);
     });
 
-    test('SearchResponse exposes clean empty state when no product matches', () async {
-      final res = await search.search('nonexistent_product_xyz', facets: ['brand']);
-      expect(res.isEmpty, isTrue);
-      expect(res.isNotEmpty, isFalse);
-      expect(res.totalHits, 0);
-      expect(res.hits, isEmpty);
-      expect(res.query, 'nonexistent_product_xyz');
-    });
+    test(
+      'SearchResponse exposes clean empty state when no product matches',
+      () async {
+        final res = await search.search(
+          'nonexistent_product_xyz',
+          facets: ['brand'],
+        );
+        expect(res.isEmpty, isTrue);
+        expect(res.isNotEmpty, isFalse);
+        expect(res.totalHits, 0);
+        expect(res.hits, isEmpty);
+        expect(res.query, 'nonexistent_product_xyz');
+      },
+    );
 
-    testWidgets('LocalSearchResultBuilder renders LocalSearchEmptyState on empty response',
-        (tester) async {
-      bool cleared = false;
-      final emptyResponse = SearchResponse<String>(
-        query: 'rolex watch',
-        hits: const [],
-        totalHits: 0,
-        queryTimeMs: 1,
-      );
+    testWidgets(
+      'LocalSearchResultBuilder renders LocalSearchEmptyState on empty response',
+      (tester) async {
+        bool cleared = false;
+        final emptyResponse = SearchResponse<String>(
+          query: 'rolex watch',
+          hits: const [],
+          totalHits: 0,
+          queryTimeMs: 1,
+        );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: LocalSearchResultBuilder<String>(
-              response: emptyResponse,
-              itemBuilder: (_, hit, _) => Text(hit.item),
-              onClear: () => cleared = true,
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(),
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: LocalSearchResultBuilder<String>(
+                response: emptyResponse,
+                itemBuilder: (_, hit, _) => Text(hit.item),
+                onClear: () => cleared = true,
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(find.text('No results found'), findsOneWidget);
-      expect(find.textContaining('rolex watch'), findsOneWidget);
+        expect(find.text('No results found'), findsOneWidget);
+        expect(find.textContaining('rolex watch'), findsOneWidget);
 
-      await tester.tap(find.text('Clear search & filters'));
-      expect(cleared, isTrue);
-    });
+        await tester.tap(find.text('Clear search & filters'));
+        expect(cleared, isTrue);
+      },
+    );
   });
 }

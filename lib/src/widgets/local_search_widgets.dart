@@ -1,7 +1,13 @@
-import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
+import 'package:flutter/widgets.dart';
+
 import '../models/search_response.dart';
 
 /// Production-ready empty state widget shown when no items match a search query or filters.
+///
+/// Built purely on `package:flutter/widgets.dart` so it adapts cleanly to Material,
+/// Cupertino, and custom widget trees without extra package dependencies.
 class LocalSearchEmptyState extends StatelessWidget {
   /// The search query that produced zero results (used in the default subtitle).
   final String? query;
@@ -37,9 +43,14 @@ class LocalSearchEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final baseStyle = DefaultTextStyle.of(context).style;
+    final foreground = baseStyle.color ?? const Color(0xFF1F2937);
+    final muted = foreground.withValues(alpha: 0.65);
+    final outline = foreground.withValues(alpha: 0.35);
+
     final trimmedQuery = query?.trim() ?? '';
-    final resolvedSubtitle = subtitle ??
+    final resolvedSubtitle =
+        subtitle ??
         (trimmedQuery.isNotEmpty
             ? 'No items matched "$trimmedQuery". Try checking for typos or clearing filters.'
             : 'No items match the current filters.');
@@ -51,33 +62,41 @@ class LocalSearchEmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             icon ??
-                Icon(
-                  Icons.search_off_rounded,
-                  size: 56,
-                  color: theme.colorScheme.outline,
+                CustomPaint(
+                  size: const Size.square(56),
+                  painter: _SearchOffIconPainter(color: muted),
                 ),
             const SizedBox(height: 16),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium?.copyWith(
+              style: baseStyle.copyWith(
+                fontSize: 18,
                 fontWeight: FontWeight.w600,
+                color: foreground,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               resolvedSubtitle,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+              style: baseStyle.copyWith(
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                color: muted,
               ),
             ),
             if (onClear != null) ...[
               const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: onClear,
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: Text(clearButtonLabel),
+              _ClearFiltersButton(
+                label: clearButtonLabel,
+                textStyle: baseStyle.copyWith(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: foreground,
+                ),
+                borderColor: outline,
+                onTap: onClear!,
               ),
             ],
           ],
@@ -96,7 +115,8 @@ class LocalSearchResultBuilder<T> extends StatelessWidget {
   final bool isLoading;
 
   /// Builder invoked for each [SearchHit] when results are present.
-  final Widget Function(BuildContext context, SearchHit<T> hit, int index) itemBuilder;
+  final Widget Function(BuildContext context, SearchHit<T> hit, int index)
+  itemBuilder;
 
   /// Optional custom widget shown while [isLoading] is true.
   final WidgetBuilder? loadingBuilder;
@@ -124,8 +144,19 @@ class LocalSearchResultBuilder<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
-      return loadingBuilder?.call(context) ??
-          const Center(child: CircularProgressIndicator());
+      if (loadingBuilder != null) {
+        return loadingBuilder!(context);
+      }
+      final baseStyle = DefaultTextStyle.of(context).style;
+      final muted = (baseStyle.color ?? const Color(0xFF1F2937)).withValues(
+        alpha: 0.65,
+      );
+      return Center(
+        child: Text(
+          'Searching...',
+          style: baseStyle.copyWith(fontSize: 14, color: muted),
+        ),
+      );
     }
 
     final current = response;
@@ -138,7 +169,79 @@ class LocalSearchResultBuilder<T> extends StatelessWidget {
     return ListView.builder(
       padding: listPadding,
       itemCount: current.hits.length,
-      itemBuilder: (context, index) => itemBuilder(context, current.hits[index], index),
+      itemBuilder: (context, index) =>
+          itemBuilder(context, current.hits[index], index),
     );
   }
+}
+
+class _ClearFiltersButton extends StatelessWidget {
+  final String label;
+  final TextStyle textStyle;
+  final Color borderColor;
+  final VoidCallback onTap;
+
+  const _ClearFiltersButton({
+    required this.label,
+    required this.textStyle,
+    required this.borderColor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.all(color: borderColor),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            child: Text(label, style: textStyle),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Paints a crisp magnifying glass with a diagonal slash without Material icon fonts.
+class _SearchOffIconPainter extends CustomPainter {
+  final Color color;
+
+  const _SearchOffIconPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.075
+      ..strokeCap = StrokeCap.round;
+
+    final center = Offset(size.width * 0.42, size.height * 0.42);
+    final radius = size.width * 0.25;
+    canvas.drawCircle(center, radius, stroke);
+
+    final handleStart =
+        center +
+        Offset(math.cos(math.pi / 4) * radius, math.sin(math.pi / 4) * radius);
+    final handleEnd = Offset(size.width * 0.84, size.height * 0.84);
+    canvas.drawLine(handleStart, handleEnd, stroke);
+
+    // Diagonal slash across the lens
+    canvas.drawLine(
+      Offset(size.width * 0.16, size.height * 0.68),
+      Offset(size.width * 0.68, size.height * 0.16),
+      stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SearchOffIconPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
