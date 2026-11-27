@@ -23,6 +23,3 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 /build/
 /coverage/
-
-# GitHub-only README (kept separate from the pub.dev README.md)
-GITHUB_README.md
