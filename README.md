@@ -1,384 +1,338 @@
 # flutter_local_search
 
 [![pub package](https://img.shields.io/pub/v/flutter_local_search.svg)](https://pub.dev/packages/flutter_local_search)
-[![pub points](https://img.shields.io/pub/points/flutter_local_search?color=2E8B57)](https://pub.dev/packages/flutter_local_search/score)
+[![pub points](https://img.shields.io/pub/points/flutter_local_search)](https://pub.dev/packages/flutter_local_search/score)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/vaibhavjangir/flutter_local_search/blob/main/LICENSE)
 [![platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](https://pub.dev/packages/flutter_local_search)
 
-An embedded, offline-first full-text search engine for **Flutter and Dart** with **BM25F field-weighted ranking**, **typo-tolerant fuzzy search**, **prefix autocomplete**, **quoted phrase queries**, **boolean Query DSL**, **faceted filtering**, **SQLite WAL persistence**, and **background Isolate execution**—no backend server or internet connection required.
+An embedded, offline-first **full-text search engine for Flutter and Dart**—no backend, cloud API key, or internet connection required. Index any `List<T>`, raw JSON array, or `List<String>` on-device with **BM25F field-weighted ranking**, **typo-tolerant fuzzy search**, **prefix autocomplete**, **exact phrase queries**, **boolean Query DSL**, **faceted filtering**, **SQLite WAL persistence**, and **background Isolate execution**.
 
 ---
 
-## Why flutter_local_search?
+## When to Use `flutter_local_search`
 
-| Feature | Raw SQLite FTS5 | Algolia / Elasticsearch | flutter_local_search |
-|---|---|---|---|
-| **Zero Backend / 100% Offline** | ✅ Yes | ❌ Requires Cloud & Wi-Fi | ✅ **Yes (On-Device)** |
-| **Dart Model Mapping (`List<T>`)** | ❌ Manual SQL | ⚠️ JSON HTTP mapping | ✅ **Native `List<T>` + Extractors** |
-| **Field Boosting (BM25F)** | ⚠️ Basic column weights | ✅ Yes | ✅ **Field-Weighted BM25F** |
-| **Typo-Tolerant Fuzzy Search** | ❌ No | ✅ Yes | ✅ **Damerau-Levenshtein** |
-| **Search-as-you-type (Prefix)** | ⚠️ Glob/Prefix | ✅ Yes | ✅ **B-Tree Range Prefix** |
-| **Positional Phrase Search** | ⚠️ Complex syntax | ✅ Yes | ✅ **Token Proximity Blobs** |
-| **Faceted Filter Aggregations** | ❌ Manual SQL grouping | ✅ Yes | ✅ **Live Facet Counts** |
-| **UI Thread Safety (60/120 FPS)**| ❌ Main thread lock | ⚠️ Network latency | ✅ **Dedicated Worker Isolate** |
-| **Built-in Empty State Widgets** | ❌ None | ❌ None | ✅ **Flutter Reactive Widgets** |
+Choose `flutter_local_search` when your Flutter or Dart app needs instant, smart client-side search over local or cached datasets—such as **notes & knowledge bases**, **contacts & directories**, **offline articles & documentation**, **task managers**, **patient/student records**, or **synced REST/GraphQL catalogs**—without paying for cloud search or blocking the UI thread.
 
----
+### How It Compares
 
-## Architecture Overview
-
-```mermaid
-flowchart TD
-    A["Your Data: List&lt;T&gt; / API JSON"] --> B["Extractor: fields: (item) =&gt; {...}"]
-    B --> C["StandardAnalyzer: Lowercase, Unicode Tokens, Positions"]
-    C --> D["Background IsolateWorker"]
-    D --> E[("SQLite WAL Database: documents, terms, postings, facets, meta")]
-    
-    Q["User Query: 'iphon 15' / SearchQuery"] --> F["QueryParser & AST"]
-    F --> D
-    E --> G["Candidate Postings & B-Tree Terms"]
-    G --> H["Damerau-Levenshtein + Prefix Matcher"]
-    H --> I["BM25F Scorer: Field Weights & Length Normalization"]
-    I --> J["Highlighter & FacetEngine"]
-    J --> K["SearchResponse&lt;T&gt;: Hits, Highlights, FacetCounts, Latency"]
-```
+| Capability | `List.where` / `.contains()` | Raw SQLite (`LIKE` / FTS5) | Cloud (Algolia / Typesense) | `flutter_local_search` |
+|---|---|---|---|---|
+| **100% Offline / Zero Backend** | Yes | Yes | No (network + keys) | **Yes (embedded SQLite WAL)** |
+| **Any Dart Model `List<T>`** | Manual loop | Manual SQL & schema | JSON over HTTP | **Typed `List<T>` + `fromJsonList`** |
+| **Relevance Ranking (BM25F)** | None | Manual / basic weights | Yes | **Field-weighted BM25F** |
+| **Typo-Tolerant Fuzzy Search** | None | None | Yes | **Damerau-Levenshtein (1-2 edits)** |
+| **Search-As-You-Type Prefix** | `.startsWith()` | `GLOB` / prefix | Yes | **B-tree term range scan** |
+| **Exact Phrase Proximity** | None | Complex SQL | Yes | **Quoted phrases + positional blobs** |
+| **Facet Counts & Range Filters** | Manual grouping | Manual `GROUP BY` | Yes | **Live `facetCounts` + filters** |
+| **UI Thread Safety (60/120 FPS)** | Main thread | Main thread unless wrapped | Network async | **Dedicated background `IsolateWorker`** |
+| **Empty-State & Result Widgets** | None | None | Separate UI SDK | **`LocalSearchResultBuilder<T>` included** |
 
 ---
 
-## Getting Started
-
-Add `flutter_local_search` to your `pubspec.yaml`:
+## Installation
 
 ```bash
 flutter pub add flutter_local_search
 ```
 
-Import it in your Dart code:
-
 ```dart
 import 'package:flutter_local_search/flutter_local_search.dart';
 ```
 
+> **Requirements:** Dart `^3.12.0` · Flutter `>=3.29.0` · Works on iOS, Android, macOS, Windows, and Linux via SQLite WAL (plus `MemoryStorage` for pure in-memory or test usage).
+
 ---
 
-## 30-Second Quickstart
+## Quickstart (Domain-Agnostic)
 
-### Approach 1: Typed Model (Production Standard)
+`flutter_local_search` adapts to whatever data model your app already uses. Pick the setup style that fits your project:
+
+### 1. Typed Model `FlutterLocalSearch<T>` (Recommended for Apps)
+
+Example using a generic `Note` model—swap `Note` for `Contact`, `Article`, `Task`, `Book`, or any custom class:
 
 ```dart
-// 1. Initialize once
-final search = FlutterLocalSearch<Product>(
-  indexName: 'products',
-  id: (p) => p.id,
-  fields: (p) => {
-    'name': SearchField.text(p.name, weight: 3.0),         // 3x boosted full-text
-    'description': SearchField.text(p.description),        // Standard full-text
-    'brand': SearchField.facet(p.brand, weight: 2.0),      // Searchable + facetable
-    'price': SearchField.number(p.price),                  // Range filters (<, >, between)
-    'inStock': SearchField.boolean(p.inStock),             // Exact boolean filter
+class Note {
+  final String id;
+  final String title;
+  final String body;
+  final String folder;
+  final int wordCount;
+  final bool pinned;
+
+  const Note({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.folder,
+    required this.wordCount,
+    required this.pinned,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'body': body,
+        'folder': folder,
+        'wordCount': wordCount,
+        'pinned': pinned,
+      };
+
+  factory Note.fromJson(Map<String, dynamic> json) => Note(
+        id: json['id'] as String,
+        title: json['title'] as String,
+        body: json['body'] as String,
+        folder: json['folder'] as String,
+        wordCount: json['wordCount'] as int,
+        pinned: json['pinned'] as bool,
+      );
+}
+
+// 1. Configure your index once
+final search = FlutterLocalSearch<Note>(
+  indexName: 'notes',
+  id: (note) => note.id,
+  fields: (note) => {
+    'title': SearchField.text(note.title, weight: 3.0), // 3x relevance boost
+    'body': SearchField.text(note.body),
+    'folder': SearchField.facet(note.folder, weight: 2.0), // Searchable + facetable
+    'wordCount': SearchField.number(note.wordCount), // Numeric range filtering
+    'pinned': SearchField.boolean(note.pinned), // Boolean filtering
   },
-  toJson: (p) => p.toJson(),
-  fromJson: Product.fromJson,
+  toJson: (note) => note.toJson(),
+  fromJson: Note.fromJson,
 );
 
 await search.initialize();
 
-// 2. Pass any List<T> (indexed in one atomic SQLite WAL transaction)
-await search.indexAll(products);
+// 2. Index a batch in a single atomic SQLite WAL transaction
+await search.indexAll(myNotes);
 
-// 3. Search with all features unlocked
+// 3. Search with typo tolerance, prefix autocomplete, highlights, filters & facets
 final response = await search.search(
-  'iphon 15',
+  'archtecture', // Typo matches "architecture"
   options: const SearchOptions(fuzzy: true, prefix: true, highlight: true),
   filters: [
-    SearchFilter.equals('brand', 'Apple'),
-    SearchFilter.range('price', min: 400, max: 1500),
+    SearchFilter.equals('folder', 'Engineering'),
+    SearchFilter.range('wordCount', min: 100, max: 2000),
   ],
-  facets: ['brand', 'inStock'],
+  facets: ['folder', 'pinned'],
 );
 
-print('Found ${response.totalHits} items in ${response.queryTimeMs} ms');
+print('Found ${response.totalHits} matches in ${response.queryTimeMs} ms');
 for (final hit in response.hits) {
-  print('${hit.item.name} (BM25: ${hit.score})');
-  print('Highlighted snippet: ${hit.highlights['description']}');
+  print('${hit.item.title} (score: ${hit.score.toStringAsFixed(2)})');
+  print('Snippet: ${hit.highlights['body']?.first}');
 }
 ```
 
----
+### 2. Dynamic JSON Lists (`FlutterLocalSearch.fromJsonList`)
 
-### Approach 2: Zero-Boilerplate for Raw API JSON
-
-If you fetch dynamic JSON arrays from an API (e.g. `dummyjson.com`, Firebase, REST endpoints) and don't want to write a Dart class:
+Index `List<Map<String, dynamic>>` directly from a REST API, local JSON file, or cache without writing model boilerplate:
 
 ```dart
-final search = FlutterLocalSearch.fromJsonList(
-  indexName: 'api_products',
-  facetFields: ['category', 'brand'],
-  fieldWeights: {'title': 3.0, 'description': 1.0},
+final directorySearch = FlutterLocalSearch.fromJsonList(
+  indexName: 'directory_records',
+  facetFields: ['department', 'location'],
+  fieldWeights: {'name': 3.0, 'bio': 1.0},
 );
 
-await search.initialize();
+await directorySearch.initialize();
+await directorySearch.indexAll(jsonRecords);
 
-// Index raw JSON maps directly
-await search.indexAll(apiJsonArray);
-
-// Search directly
-final response = await search.search('headfones', options: const SearchOptions(fuzzy: true));
+final res = await directorySearch.search(
+  'engneer',
+  options: const SearchOptions(fuzzy: true),
+  facets: ['department'],
+);
 ```
 
----
+### 3. Plain String Lists (`FlutterLocalSearch.strings`)
 
-### Approach 3: Quick Plain String Lists
-
-Ideal for tags, city names, categories, or recent searches:
+For tags, cities, commands, categories, or recent search suggestions:
 
 ```dart
-final tagsSearch = FlutterLocalSearch.strings(indexName: 'recent_tags');
-await tagsSearch.initialize();
-await tagsSearch.indexAll(['flutter', 'dart', 'sqlite', 'full-text-search']);
+final topicSearch = FlutterLocalSearch.strings(indexName: 'topics');
+await topicSearch.initialize();
+await topicSearch.indexAll(['architecture', 'animations', 'accessibility', 'sqlite']);
 
-final res = await tagsSearch.search('fluter', options: const SearchOptions(fuzzy: true));
-print(res.items); // ['flutter']
+final res = await topicSearch.search('archtect', options: const SearchOptions(fuzzy: true, prefix: true));
+print(res.items); // ['architecture']
 ```
 
 ---
 
-## 12 Core Capabilities & Code Examples
+## Core Capabilities
 
 ### 1. Field-Weighted BM25F Relevance Ranking
-Fields can be boosted with custom weights. A match in a high-weight field (`weight: 3.0`) accurately outranks matches in low-weight fields (`weight: 1.0`), normalized by field length.
-
-```dart
-fields: (p) => {
-  'title': SearchField.text(p.title, weight: 5.0), // High priority
-  'tags': SearchField.text(p.tags, weight: 3.0),
-  'body': SearchField.text(p.body, weight: 1.0),   // Standard priority
-}
-```
-
----
+Assign custom weights per field (`SearchField.text(value, weight: 3.0)` or `SearchField.facet(...)`). BM25F normalizes by field length and persists weights across restarts so important fields like `title` or `name` naturally outrank long body text.
 
 ### 2. Typo-Tolerant Fuzzy Search (Damerau-Levenshtein)
-Treats adjacent transpositions (`"fluter"` → `"flutter"` or `"iphnoe"` → `"iphone"`) as a single edit with length-window pruning and relevance decay (exact matches rank above 1-typo matches, which rank above 2-typo matches).
+Handles substitutions, insertions, deletions, and **adjacent character transpositions** (`"fluter"` → `"flutter"`, `"recpie"` → `"recipe"`) as a single edit with length-window pruning and score decay (exact matches rank above 1-edit matches, which rank above 2-edit matches):
 
 ```dart
-final response = await search.search(
-  'galxy',
-  options: const SearchOptions(
-    fuzzy: true,
-    maxEditDistance: 2, // 1 or 2 typos allowed
-  ),
+final res = await search.search(
+  'algoritm',
+  options: const SearchOptions(fuzzy: true, maxEditDistance: 2),
 );
 ```
 
----
-
-### 3. Prefix Matching (Search-As-You-Type)
-Uses a B-tree range scan over SQLite term dictionary (`t.term >= prefix AND t.term < upperBound`) to return autocomplete matches in sub-milliseconds.
+### 3. Prefix Autocomplete (Search-As-You-Type)
+Uses an indexed SQLite B-tree term range scan (`term >= prefix AND term < upperBound`) for responsive keystroke-by-keystroke suggestions:
 
 ```dart
-final response = await search.search(
-  'sam',
-  options: const SearchOptions(prefix: true),
+final res = await search.search(
+  'arch',
+  options: const SearchOptions(prefix: true, limit: 10),
 );
 ```
 
----
-
-### 4. Quoted Phrase Queries
-Verifies sequential token adjacency in the document using packed `Uint32List` position blobs.
+### 4. Exact Phrase & Positional Queries
+Quoted strings and `SearchQuery.phrase` verify sequential token positions stored as packed `Uint32List` position blobs:
 
 ```dart
-// Matches documents containing the exact phrase "spring boot" in order
-final response = await search.search('"spring boot"');
+final res = await search.search('"offline first"');
+// Or with optional positional slop via Query DSL:
+final sloppy = await search.searchQuery(SearchQuery.phrase('offline sync', slop: 1));
 ```
 
----
-
-### 5. Structured & Range Filtering
-Filters are executed directly inside SQLite using fast `json_extract`:
+### 5. Structured Filtering (`SearchFilter`)
+Filter numeric, boolean, and facet fields inside SQLite using JSON extraction (`json_extract`):
 
 ```dart
-final response = await search.search(
-  'laptop',
+final res = await search.search(
+  'meeting',
   filters: [
-    SearchFilter.equals('brand', 'Apple'),
-    SearchFilter.inList('category', ['laptops', 'ultrabooks']),
-    SearchFilter.range('price', min: 1000, max: 2500),
-    SearchFilter.boolean('inStock', true),
+    SearchFilter.equals('folder', 'Work'),
+    SearchFilter.inList('status', ['active', 'review']),
+    SearchFilter.range('wordCount', min: 50, max: 1500),
+    SearchFilter.gte('priority', 2),
+    SearchFilter.boolean('pinned', true),
   ],
 );
 ```
 
----
+Available filters: `equals`, `inList`, `range`, `gt`, `gte`, `lt`, `lte`, `boolean`.
 
-### 6. Dynamic Faceted Aggregations
-Compute live category counts across all matching search results:
+### 6. Live Faceted Aggregations
+Compute live category counts across matching hits in a single query:
 
 ```dart
-final response = await search.search('pro', facets: ['brand', 'category']);
-
-print(response.facetCounts['brand']); 
-// Output: {'Apple': 12, 'Samsung': 4, 'Sony': 3}
+final res = await search.search('roadmap', facets: ['folder', 'pinned']);
+print(res.facetCounts['folder']); // e.g., {'Work': 12, 'Personal': 3}
 ```
 
----
-
 ### 7. Word-Boundary Snippet Highlighting
-Generates contextual snippets wrapped with `<mark>` (or custom tags) while respecting word boundaries so partial mid-word strings are never highlighted.
+Wraps matched terms cleanly at word boundaries without breaking words mid-token:
 
 ```dart
-final response = await search.search(
-  'titanium',
+final res = await search.search(
+  'offline',
   options: const SearchOptions(
     highlight: true,
     highlightPreTag: '<mark>',
     highlightPostTag: '</mark>',
   ),
 );
-
-// Renders: "...engineered with <mark>titanium</mark> chassis..."
 ```
 
----
-
-### 8. Fluent Query DSL & Boolean AST Parser
-Supports human-friendly string queries (`"apple -macbook"`, `"phone OR laptop"`) or a type-safe fluent Dart builder:
+### 8. Boolean Query Parser & Fluent AST DSL
+Supports human-readable operators (`AND`, `OR`, `NOT`, `-exclude`, `"exact phrase"`) as well as a composable Dart AST builder (`SearchQuery`):
 
 ```dart
-// Option A: Human Query String
-final res = await search.search('laptop AND AMOLED -refurbished');
+// Human query string
+final resA = await search.search('flutter AND sqlite -deprecated');
 
-// Option B: Fluent DSL Builder
-final query = SearchQuery.match('laptop')
-    .andNot(SearchQuery.match('refurbished'))
-    .where(SearchFilter.range('price', max: 1500));
+// Fluent Query DSL
+final query = SearchQuery.match('flutter')
+    .and(SearchQuery.phrase('local search'))
+    .andNot(SearchQuery.match('deprecated'))
+    .where(SearchFilter.boolean('archived', false));
 
-final res = await search.searchQuery(query);
+final resB = await search.searchQuery(query);
 ```
 
----
+### 9. Non-Blocking Background Isolate Execution
+With `useIsolate: true` (the default for file-backed SQLite), indexing and search run on a dedicated background `IsolateWorker` so animations and scrolling stay smooth.
 
-### 9. Background Isolate Worker (Zero UI Jank)
-By default (`useIsolate: true`), batch indexing and search operations are offloaded to a dedicated background Dart Isolate over SQLite WAL mode. 
-
-```dart
-final search = FlutterLocalSearch<Product>(
-  indexName: 'products',
-  useIsolate: true, // Default: true (runs heavy ops in background Isolate)
-  // ...
-);
-```
-
----
-
-### 10. Persistent SQLite WAL Storage & Cold-Start Reopening
-The database is persisted in WAL (Write-Ahead Logging) mode. When the app restarts, opening the index takes ~3 ms with cached field statistics.
+### 10. Persistent SQLite WAL & Fast Cold Reopen
+Databases run in SQLite Write-Ahead Logging (`WAL`) mode with persisted metadata and field length statistics for instant reopen across app restarts:
 
 ```dart
-// Session 1: Index data
-await search.indexAll(products);
 await search.close();
 
-// Session 2: Cold reopen in a fresh app launch
-final reopened = FlutterLocalSearch<Product>(/* same indexName */);
+// On next app launch with the same indexName:
+final reopened = FlutterLocalSearch<Note>(/* same configuration */);
 await reopened.initialize();
-final res = await reopened.search('camera'); // Instant cold-start search
+final res = await reopened.search('architecture');
 ```
 
----
-
-### 11. Incremental Upsert & Delete
-Update or remove items on the fly without reindexing the entire catalog:
+### 11. Incremental Upsert, Delete & Clear
+Update individual records in milliseconds without rebuilding the entire index:
 
 ```dart
-// Insert or update a single item (< 10 ms)
-await search.upsert(updatedProduct);
-
-// Delete an item and automatically clean up term frequencies
-await search.remove('product_id_123');
-
-// Clear the entire index
+await search.upsert(updatedNote);
+await search.remove('note_42');
 await search.clear();
 ```
 
----
-
-### 12. Built-in Empty State & Result Builder Widgets
-
-`flutter_local_search` provides ready-to-use Flutter widgets so your UI handles loading states, empty searches, and filter resets cleanly:
+### 12. Ready-to-Use Flutter Result & Empty-State Widgets
+Use `LocalSearchResultBuilder<T>` and `LocalSearchEmptyState`—or build custom UI using `response.isEmpty` / `response.isNotEmpty`:
 
 ```dart
-LocalSearchResultBuilder<Product>(
-  response: searchResponse,
+LocalSearchResultBuilder<Note>(
+  response: response,
   isLoading: isSearching,
   onClear: () {
-    searchController.clear();
+    controller.clear();
     resetFilters();
   },
   itemBuilder: (context, hit, index) {
     return ListTile(
-      title: Text(hit.item.name),
-      subtitle: Text('Score: ${hit.score.toStringAsFixed(2)}'),
-      trailing: Text('\$${hit.item.price}'),
+      title: Text(hit.item.title),
+      subtitle: Text('Relevance: ${hit.score.toStringAsFixed(2)}'),
     );
   },
 )
 ```
 
-If no items match, it automatically displays `LocalSearchEmptyState` with a helpful message and a "Clear search & filters" button.
+---
+
+## Storage Options
+
+| Mode | Configuration | Best For |
+|---|---|---|
+| **SQLite WAL + Background Isolate** *(default)* | `FlutterLocalSearch(..., useIsolate: true)` | Production apps, persistence across restarts, large datasets |
+| **SQLite WAL (Direct / Custom Path)** | `customDbPath: '/path/to/idx.db', useIsolate: false` | Single-isolate CLI scripts or custom storage lifecycle |
+| **Pure In-Memory (`MemoryStorage`)** | `storage: MemoryStorage(), useIsolate: false` | Ephemeral session search, unit tests, zero disk I/O |
 
 ---
 
-## 10,000-Document Benchmark
+## Performance Benchmark (10,000 Documents)
 
-Measured on a real device with disk-persisted SQLite WAL storage via the background `IsolateWorker` (`test/benchmark_10k_test.dart`):
+Measured via `flutter test test/benchmark_10k_test.dart` using disk-persisted SQLite WAL storage and the background `IsolateWorker`:
 
-| Operation | Dataset Size | Measured Latency | Target |
-|---|---|---|---|
-| **Batch `indexAll`** (single SQLite transaction) | 10,000 items | **916 ms** | < 5,000 ms |
-| **Exact Query + Range Filter + Facet Counts** | 10,000 items | **30 ms** | < 50 ms |
-| **Prefix Autocomplete** (matching 10,000 items) | 10,000 items | **44 ms** | < 50 ms |
-| **Incremental Single-Doc `upsert`** | 10,000 items | **8 ms** | < 10 ms |
-| **Cold-Start Reopen + Query** | 10,000 items | **3 ms** | < 50 ms |
-
----
-
-## Interactive Demo App
-
-A complete runnable Flutter demo with search-as-you-type, feature toggle chips, category facet pills, and a custom API JSON playground is included in the [`example/`](https://github.com/vaibhavjangir/flutter_local_search/tree/main/example) directory:
-
-```bash
-cd example
-flutter run
-```
+| Operation | Dataset Size | Measured Latency |
+|---|---|---|
+| Batch `indexAll` (single WAL transaction) | 10,000 docs | **859 ms** |
+| Exact query + filter + facet counts | 10,000 docs | **32 ms** |
+| Prefix autocomplete (matching all 10,000 docs) | 10,000 docs | **44 ms** |
+| Incremental single-document `upsert` | 10,000 docs | **8 ms** |
+| Cold-start database reopen + query | 10,000 docs | **3 ms** |
 
 ---
 
-## How to Publish to pub.dev
+## API Summary
 
-When you are ready to publish:
-
-1. **Verify your local Git repository**:
-   ```bash
-   git add .
-   git commit -m "feat: initial release of flutter_local_search"
-   git remote add origin https://github.com/vaibhavjangir/flutter_local_search.git
-   git push -u origin main
-   ```
-
-2. **Run validation check**:
-   ```bash
-   flutter pub publish --dry-run
-   ```
-
-3. **Publish to pub.dev**:
-   ```bash
-   dart pub publish
-   ```
+* **Engine:** `FlutterLocalSearch<T>`, `FlutterLocalSearch.fromJsonList(...)`, `FlutterLocalSearch.strings(...)`
+* **Schema:** `SearchField.text`, `SearchField.facet`, `SearchField.number`, `SearchField.boolean`
+* **Query & Options:** `SearchOptions`, `SearchQuery`, `SearchFilter`, `StandardAnalyzer`, `BM25FScorer`
+* **Results:** `SearchResponse<T>` (`hits`, `items`, `totalHits`, `facetCounts`, `queryTimeMs`, `isEmpty`, `isNotEmpty`), `SearchHit<T>`
+* **Widgets:** `LocalSearchResultBuilder<T>`, `LocalSearchEmptyState`
+* **Storage:** `SqliteStorage`, `MemoryStorage`, `StorageAdapter`
 
 ---
 
 ## License
 
-MIT License. See [LICENSE](https://github.com/vaibhavjangir/flutter_local_search/blob/main/LICENSE) for details.
+MIT License — see [LICENSE](https://github.com/vaibhavjangir/flutter_local_search/blob/main/LICENSE).

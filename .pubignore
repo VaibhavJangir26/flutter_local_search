@@ -1,0 +1,28 @@
+# Inherited project ignores (because .pubignore overrides .gitignore in dart pub)
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ / IDE files
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Flutter/Dart/Pub build artifacts
+/pubspec.lock
+**/doc/api/
+.dart_tool/
+.flutter-plugins-dependencies
+/build/
+/coverage/
+
+# GitHub-only README (kept separate from the pub.dev README.md)
+GITHUB_README.md
